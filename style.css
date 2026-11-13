@@ -220,3 +220,16 @@ p {
     background: #2563eb;
     border-color: #2563eb;
 }
+
+#exportWordButton {
+    padding: 8px 14px;
+    border: 1px solid #999;
+    border-radius: 4px;
+    background: #fff;
+    cursor: pointer;
+    font-size: 14px;
+}
+
+#exportWordButton:hover {
+    background: #f2f2f2;
+}

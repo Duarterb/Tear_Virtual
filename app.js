@@ -1,7 +1,7 @@
 // ============================================================
 // MATRIX CLASS
 // Responsible for the original 4 x 44 A-D matrix.
-// ============================================================
+// ============================================================s
 
 class Matrix {
     constructor(rows, columns, storageKey = "tearVirtualMatrix") {
@@ -535,6 +535,7 @@ const COLS = 44;
 const matrixElement = document.getElementById("matrix");
 const clearButton = document.getElementById("clearButton");
 const expandButton = document.getElementById("expandButton");
+const exportWordButton = document.getElementById("exportWordButton");
 const controlsElement = document.getElementById("controls");
 
 // Create the two data objects.
@@ -752,6 +753,280 @@ function renderMatrix() {
     }
 }
 
+// ============================================================
+// WORD EXPORT
+// ============================================================
+// Exports the expanded matrix as a Word-compatible .doc file.
+//
+// The expanded matrix is divided into 44-column segments.
+// Because the matrix is read from right to left, the right-most
+// segment is exported first.
+//
+// Four 44-column tables are placed on each Word page.
+// ============================================================
+
+function buildWordTable(numbers, startIndex) {
+    const SEGMENT_SIZE = 32;
+
+    let html = `
+        <table
+            style="
+                border-collapse: collapse;
+                margin: 0 0 10px 0;
+                direction: ltr;
+                table-layout: fixed;
+            "
+        >
+            <tbody>
+    `;
+
+    // Four rows: D, C, B, A
+    for (let row = 4; row >= 1; row--) {
+
+        html += "<tr>";
+
+        for (
+            let column = startIndex;
+            column < Math.min(startIndex + SEGMENT_SIZE, numbers.length);
+            column++
+        ) {
+            const number = numbers[column];
+
+            const value = number === row ? number : "";
+
+            html += `
+                <td
+                    style="
+                        border: 1px solid #000000;
+                        width: 0.44cm;
+                        height: 0.22cm;
+                        padding: 0;
+                        text-align: center;
+                        vertical-align: middle;
+                        font-family: Arial, sans-serif;
+                        font-size: 8pt;
+                        line-height: 1;
+                    "
+                >
+                    ${value}
+                </td>
+            `;
+        }
+
+        html += "</tr>";
+    }
+
+    html += `
+            </tbody>
+        </table>
+    `;
+
+    return html;
+}
+
+function buildWordDocument(numbers) {
+
+    const SEGMENT_SIZE = 32;
+    const TABLES_PER_PAGE = 4;
+
+    // --------------------------------------------------------
+    // Create the 44-column segments from RIGHT to LEFT.
+    //
+    // Example: 60 columns
+    //
+    // RIGHT → LEFT:
+    //
+    // [44 columns] [16 columns]
+    //
+    // Example: 104 columns
+    //
+    // RIGHT → LEFT:
+    //
+    // [44] [44] [16]
+    //
+    // The smaller remainder is therefore always the LAST
+    // segment on the left.
+    // --------------------------------------------------------
+
+    const segments = [];
+
+    let remaining = numbers.length;
+
+    while (remaining > 0) {
+
+        const segmentSize = Math.min(
+            SEGMENT_SIZE,
+            remaining
+        );
+
+        const start = remaining - segmentSize;
+
+        segments.push({
+            start: start,
+            end: remaining
+        });
+
+        remaining = start;
+    }
+
+    // At this point segments are already in the desired
+    // RIGHT → LEFT order.
+    //
+    // For 60 columns:
+    //
+    // segments[0] = columns 16-59  (44 columns)
+    // segments[1] = columns 0-15   (16 columns)
+    //
+    // Therefore DO NOT reverse this array.
+
+
+    let body = "";
+
+    // --------------------------------------------------------
+    // Put four tables on each Word page.
+    // --------------------------------------------------------
+
+    for (let i = 0; i < segments.length; i += TABLES_PER_PAGE) {
+
+        if (i > 0) {
+            body += `
+                <div style="page-break-before: always;"></div>
+            `;
+        }
+
+        const pageSegments = segments.slice(
+            i,
+            i + TABLES_PER_PAGE
+        );
+
+        body += `
+            <div
+                style="
+                    width: 100%;
+                    margin: 0;
+                    padding: 0;
+                "
+            >
+        `;
+
+        for (const segment of pageSegments) {
+
+            body += buildWordTable(
+                numbers,
+                segment.start
+            );
+        }
+
+        body += "</div>";
+    }
+
+    return `
+<!DOCTYPE html>
+<html>
+<head>
+<meta charset="UTF-8">
+
+<style>
+
+@page {
+    size: A4 landscape;
+    margin: 1cm;
+}
+
+body {
+    margin: 0;
+    padding: 0;
+    font-family: Arial, sans-serif;
+}
+
+table {
+    border-collapse: collapse;
+}
+
+td {
+    border: 1px solid #000000;
+}
+
+</style>
+
+</head>
+
+<body>
+
+${body}
+
+</body>
+</html>
+`;
+}
+
+function exportExpandedMatrixToWord() {
+
+    // Make sure the expanded line exists.
+    if (
+        !expandedMatrix.line ||
+        expandedMatrix.line.length === 0
+    ) {
+        alert("Please expand the matrix before exporting it.");
+        return;
+    }
+
+    // Convert the expanded line into the same number
+    // representation currently displayed on the website.
+    const numbers = expandedMatrix.line_to_matrix();
+
+    if (!numbers || numbers.length === 0) {
+        alert("There is no expanded matrix to export.");
+        return;
+    }
+
+    // Build the Word-compatible HTML document.
+    const html = buildWordDocument(numbers);
+
+    // Create a Blob containing the document.
+    const blob = new Blob(
+        [
+            "\ufeff",
+            html
+        ],
+        {
+            type: "application/msword"
+        }
+    );
+
+    // Create a temporary download URL.
+    const url = URL.createObjectURL(blob);
+
+    // Create a temporary download link.
+    const link = document.createElement("a");
+
+    link.href = url;
+
+    const date = new Date();
+
+    const timestamp =
+        date.getFullYear() +
+        "-" +
+        String(date.getMonth() + 1).padStart(2, "0") +
+        "-" +
+        String(date.getDate()).padStart(2, "0") +
+        "_" +
+        String(date.getHours()).padStart(2, "0") +
+        "-" +
+        String(date.getMinutes()).padStart(2, "0");
+
+    link.download =
+        `expanded-matrix-${timestamp}.doc`;
+
+    document.body.appendChild(link);
+
+    link.click();
+
+    // Clean up.
+    document.body.removeChild(link);
+
+    URL.revokeObjectURL(url);
+}
 
 // ============================================================
 // BUTTON EVENTS
@@ -796,6 +1071,14 @@ expandButton.addEventListener("click", () => {
     });
 
 });
+
+// Export expanded matrix to Word.
+if (exportWordButton) {
+    exportWordButton.addEventListener(
+        "click",
+        exportExpandedMatrixToWord
+    );
+}
 
 // ============================================================
 // INITIAL RENDER
